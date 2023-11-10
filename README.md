@@ -1,4 +1,4 @@
-# ML_Project
+# Scene Recognition Using Computer Vision
 
 Names:
 - Sankalp Shubham
