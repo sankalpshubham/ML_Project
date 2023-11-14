@@ -10,5 +10,5 @@ Project Description:
 
     - PyTorch
     - COCO dataset: https://paperswithcode.com/sota/image-captioning-on-coco
-    - Model: MobileNetV2 OR VGG-16
+    - Model: MobileNetV2 OR VGG-16 OR YOLOv3
     - Transfer Learning: Base model with one layer replaced and customized
