@@ -10,7 +10,10 @@
 from torchvision.models.detection.faster_rcnn import fasterrcnn_resnet50_fpn
 from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn
 import torch, cv2, base64
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
+import math
 
 device = torch.device("cuda")
 
@@ -28,6 +31,60 @@ COCO_INSTANCE_CATEGORY_NAMES = [
     'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A', 'book',
     'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
 ]
+
+#---- custom convolution layer ----
+class CustomConv2d(torch.nn.Module):
+    def __init__(self, inChannels, outChannels, kernelSize, dilation=1, padding=0, stride=1):
+        super(CustomConv2d, self).__init__()
+        self.inChannels = inChannels
+        self.outChannels = outChannels
+        self.kernelSize = (kernelSize, kernelSize)
+        self.kernelSizeNum = kernelSize * kernelSize
+        self.dilation = (dilation, dilation)
+        self.padding = (padding, padding)
+        self.stride = (stride, stride)
+        self.weights = nn.Parameter(torch.Tensor(self.outChannels, self.inChannels, self.kernelSizeNum))
+        
+    def forward(self, x):
+        width = self.calculateNewWidth(x)
+        height = self.calculateNewHeight(x)
+        windows = self.calculateWindows(x)
+        
+        result = torch.zeros([x.shape[0] * self.outChannels, width, height], dtype=torch.float32, device=device)
+        
+        for channel in range(x.shape[1]):
+            for i_convNumber in range(self.out_channels):
+                xx = torch.matmul(windows[channel], self.weights[i_convNumber][channel]) 
+                xx = xx.view(-1, width, height)
+                result[i_convNumber * xx.shape[0] : (i_convNumber + 1) * xx.shape[0]] += xx
+        
+        return result
+
+    def calculateWindows(self, x):
+        windows = F.unfold(
+            x, kernel_size=self.kernel_size, padding=self.padding, dilation=self.dilation, stride=self.stride
+        )
+
+        windows = windows.transpose(1, 2).contiguous().view(-1, x.shape[1], self.kernal_size_number)
+        windows = windows.transpose(0, 1)
+
+        return windows
+    
+    def calculateNewWidth(self, x):
+        return (
+            (x.shape[2] + 2 * self.padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1)
+            // self.stride[0]
+        ) + 1
+
+    def calculateNewHeight(self, x):
+        return (
+            (x.shape[3] + 2 * self.padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1)
+            // self.stride[1]
+        ) + 1
+
+    def get_weights(self):
+        kernal_size = int(math.sqrt(self.kernal_size_number))
+        return nn.Parameter(self.weights.view(self.out_channels, self.n_channels, kernal_size, kernal_size))
 
 #---- functions ----
 def cv2_to_tensor(image):
@@ -80,13 +137,16 @@ def draw_boxes(image, predictions):
             thickness = size_factor
         )
     return image
-#--------
+
 
 #model = fasterrcnn_resnet50_fpn(pretrained=True)
 model = maskrcnn_resnet50_fpn(pretrained=True)
+
+# NEW CODE
+model.backbone.fpn.add_module("4", CustomConv2d(20, 20, 5))
+
 model.eval()
 model.to(device)
-
 img = cv2.imread("street_img.png", cv2.IMREAD_ANYCOLOR)
 
 tensor = cv2_to_tensor(img)
