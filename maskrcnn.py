@@ -8,19 +8,19 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
 def train_maskrcnn():
     # Define your data transforms (you might need to adjust these)
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor()
+    transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Resize((640, 640))
     ])
 
     # Load the COCO dataset
-    train_dataset = CocoDetection(root='./coco_minitrain_25k', annFile='./coco_minitrain_25k/annotations/instances_train2017.json', transform=transform)
-    train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4)
+    train_dataset = CocoDetection(root='./coco_minitrain_25k/images/val2017', annFile='./coco_minitrain_25k/annotations/instances_val2017.JSON', transform=transform)
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
 
     # Create the Mask R-CNN model
     model = maskrcnn_resnet50_fpn(pretrained=True)
     num_classes = len(train_dataset.coco.getCatIds())  # Get the number of classes in the COCO dataset
     in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = MaskRCNNPredictor(in_features, num_classes)
+    dim_reduces = 256
+    model.roi_heads.box_predictor = MaskRCNNPredictor(in_features, dim_reduces, num_classes)
 
     # Set the device to GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,11 +34,11 @@ def train_maskrcnn():
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
     # Training loop
-    num_epochs = 10
+    num_epochs = 1
     for epoch in range(num_epochs):
         for images, targets in train_loader:
             images = list(image.to(device) for image in images)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            targets = [{k: v for k, v in t.items()} for t in targets]
 
             loss_dict = model(images, targets)
             losses = sum(loss for loss in loss_dict.values())
