@@ -45,44 +45,35 @@ class CustomConv2d(torch.nn.Module):
         self.stride = (stride, stride)
         self.weights = nn.Parameter(torch.Tensor(self.outChannels, self.inChannels, self.kernelSizeNum))
         
-    def forward(self, x):
-        width = self.calculateNewWidth(x)
-        height = self.calculateNewHeight(x)
+    def forwardProp(self, x):
+        width = self.calculateWidth(x)
+        height = self.calculateHeight(x)
         windows = self.calculateWindows(x)
         
         result = torch.zeros([x.shape[0] * self.outChannels, width, height], dtype=torch.float32, device=device)
         
-        for channel in range(x.shape[1]):
-            for i_convNumber in range(self.out_channels):
-                xx = torch.matmul(windows[channel], self.weights[i_convNumber][channel]) 
-                xx = xx.view(-1, width, height)
-                result[i_convNumber * xx.shape[0] : (i_convNumber + 1) * xx.shape[0]] += xx
+        for c in range(x.shape[1]):
+            for i in range(self.out_channels):
+                x = torch.matmul(windows[c], self.weights[i][c]) 
+                x = x.view(-1, width, height)
+                result[i * x.shape[0]:(i + 1) * x.shape[0]] += x
         
         return result
 
     def calculateWindows(self, x):
-        windows = F.unfold(
-            x, kernel_size=self.kernel_size, padding=self.padding, dilation=self.dilation, stride=self.stride
-        )
-
+        windows = F.unfold(x, kernel_size=self.kernel_size, padding=self.padding, dilation=self.dilation, stride=self.stride)
         windows = windows.transpose(1, 2).contiguous().view(-1, x.shape[1], self.kernal_size_number)
         windows = windows.transpose(0, 1)
 
         return windows
     
-    def calculateNewWidth(self, x):
-        return (
-            (x.shape[2] + 2 * self.padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1)
-            // self.stride[0]
-        ) + 1
+    def calculateWidth(self, x):
+        return ( (x.shape[2] + 2 * self.padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) // self.stride[0]) + 1
 
-    def calculateNewHeight(self, x):
-        return (
-            (x.shape[3] + 2 * self.padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1)
-            // self.stride[1]
-        ) + 1
+    def calculateHeight(self, x):
+        return ( (x.shape[3] + 2 * self.padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1)// self.stride[1]) + 1
 
-    def get_weights(self):
+    def getWeights(self):
         kernal_size = int(math.sqrt(self.kernal_size_number))
         return nn.Parameter(self.weights.view(self.out_channels, self.n_channels, kernal_size, kernal_size))
 
